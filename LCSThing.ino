@@ -15,9 +15,9 @@ WiFiServer meshServer(4011);
 
 //Defining Pins 
 #define led 5
-const int DPin12 = 12;
+#define DPin12 12
 
-//Constaint Variables (these don't change)
+//Constant Variables (these don't change)
 const byte DNS_PORT = 53;
 
 //Default Variables (can be changed)
@@ -56,9 +56,9 @@ void setWifiRole() { //Making sure we're in the right WiFi mode based on the dev
   }
 }
 
-bool testWifi() { //We're testing to see if the Access Points we have in memory are valid or accessable
+bool testWifi() { //We're testing to see if the Access Points we have in memory are valid or accessible
   int c = 0;
-  Serial1.println("Connecting Wifi... hopefully they're still there :/ ");  
+  Serial1.println("Connecting WiFi... hopefully they're still there :/ ");  
   while ( c < 20 ) {
     if(wifiMulti.run() == WL_CONNECTED) { return true; } 
     delay(500);
@@ -70,7 +70,7 @@ bool testWifi() { //We're testing to see if the Access Points we have in memory 
   return false;
 } 
 
-String wifiScan() { //Locating accessiable Access Points. Depending on my role this can be another esp8266 or a web connected router
+String wifiScan() { //Locating accessible Access Points. Depending on my role this can be another esp8266 or a web connected router
   Serial1.println("Looking for available WiFi networks. Who's all out there?");
   int n = WiFi.scanNetworks();
   Serial1.println("All done");
@@ -186,7 +186,7 @@ char value;
 
 //Memory Functions
   // first byte is a start byte 224
-  // next are: variable key (1byte), location of first byte(3), and lenth(3) - blockIDs
+  // next are: variable key (1 byte), location of first byte(3), and length(3) - blockIDs
     //N - Settings Name
     //S - Settings Security
     //R - Setting Role 
@@ -198,15 +198,38 @@ char value;
 char blockStart = 2;
 int blockSize = 512; //Size of EEPROM in Bytes
 int blockRefStart = 1; //Hard coded location (byte) of the start to the block reference section
-int blockRefLength = 3; //Each BlockID Ref is currently 3bytes
+int blockRefLength = 3; //Each BlockID Ref is currently 3 bytes
 int blockIDCount = 8; //Currently 8 block IDs
 char blockIDs[9] = {'N', 'S', 'R', 'C', 'W', 'D', 'P', 'A'};
 int blockRefStop = blockRefLength * blockIDCount + blockRefStart;
 
+bool setBlockRef(char blockID, char blockStart char blockLength) {
+  //Initializing Local Variables
+  char _blockID = blockID;
+  char _blockStart = blockStart;
+  char _blockLength = blockLength;
+
+  //Setting Block Reference information
+  if (!initBlockRef()) {
+    for (int x = blockRefStart; x <= blockRefStop; x += blockRefLength) {
+      if (EEPROM.read(x) == _blockID) {
+        EEPROM.write(x + 1, _blockStart);
+        EEPROM.write(x + 2, _blockLength);
+        EEPROM.commit();
+        return true;
+      }
+    }
+  }
+  else {
+    //In order for this function to have been called Block Reference should have already been Initialized
+    return false; 
+  }
+}
+
 bool initBlockRef() { //Initializes the EEPROM block if: it is blank, is corrupt, or is being refreshed
   if (EEPROM.read(0) != blockStart) {// ASCII lowercase Alpha
     int i = 0;
-    for (int x = blockRefStart; (x <= blockRefStop) && (i <= (blockIDCount - 1));x += blockRefLength) {
+    for (int x = blockRefStart; (x <= blockRefStop) && (i <= (blockIDCount - 1)); x += blockRefLength) {
       EEPROM.write(x, blockIDs[i]);
       EEPROM.commit();
       for (int j = 1; j <= 2; j++) {
@@ -281,23 +304,60 @@ int availableBlock(char blockID, int bytesReq) { //Locates the first available b
   return -1;
 }
 
-bool setBlock() {
-  
+bool setBlock(int startBlock, String blockString, char blockID) {
+  //Initializing Local Variables
+  int _startBlock = startBlock; //What block to start writing to memory at
+  char _blockSize = blockString.length; //Length of blockString without trailing null char
+  char _blockBytes[_blockSize + 1];
+  blockString.toCharArray(_blockBytes, sizeof(_blockBytes)); //Converting String Object to Char array
+  char _blockID = blockID;
+  //Writing converted String Object to memory
+    //By just using _blockSize this loop will not include trailing null char added when converting to char array
+    //To do so use "x <= sizeof(_blockBytes) - 1". Minus 1 is to account for 0 start position in array
+  for (int x = 0; x <= _blockSize - 1; x++) { 
+    int _block = _startBlock + x;
+    EEPROM.write(_block, _blockBytes[x]);
+    EEPROM.commit();
+    delay(100); //This is a time consuming function. Delay allows pending background tasks to complete
+  }
+
+  //Confirming String Object was properly written to memory
+  for (int x = 0; x <= _blockSize - 1; x++) {
+    int _block = _startBlock + x;
+    char _value;
+    _value = EEPROM.read(_block);
+    delay(100)
+    if (_value != _blockBytes[x]) {
+      return false;
+    } 
+  }
+  //Updating Block Reference
+  (setBlockRef(_blockID, _blockStart, _blockSize)) ? return true : return false;
 }
 
 bool setDeviceName(String prefix, String deviceName) {
+  //Initializing Local Variables
   prefix.trim();
   String _prefix = prefix;
   deviceName.trim();
   String _deviceName = deviceName;
   char _blockID = 'N'; //Block ID for Settings Name
-  int _bytesReq = 7; // N,P,x,x,(char is Prefix) + U,x,x, (char is Name) 
+  int _bytesReq; 
+  String _blockString; // N,P,x,(char is Prefix) + U,x, (char is Name)
+
+  //Building _blockString
+    //N,P,x,(char is Prefix) + U,x, (char is Name)
+  char _prefixLength = _prefix.length();
+  char _deviceNameLength = _deviceName.length();
+  _blockString = "NP" + _prefixLength + _prefix + "U" + _deviceNameLength + _deviceName;
+  Serial1.println(_blcokString);
+  _bytesReq = _blockString.length;
+
+  //Calling required functions 
   initBlockRef();
-  _bytesReq += _prefix.length();
-  _bytesReq += _deviceName.length();
   int _availableBlock = availableBlock(_blockID, _bytesReq);
   Serial1.println(_availableBlock);
-  return true;
+  (setBlock(_availableBlock, _blockString)) ? return true : return false;
 }
 
 void setSec() {
@@ -330,7 +390,7 @@ void setAdv() {
 
 bool getSettings() { //Checks and retrieves data from EEPROM memory
   // first byte is a start byte 224
-  // next are variable key (2byte), location of first byte(3), and lenth(3) - blockIDs
+  // next are variable key (2 byte), location of first byte(3), and length(3) - blockIDs
     //N - Settings Name
     //S - Settings Security
     //R - Setting Role 
@@ -341,7 +401,7 @@ bool getSettings() { //Checks and retrieves data from EEPROM memory
     //A - Settings Advanced
     
   
-  Serial1.println("Determining if there is any current settings in my itty bitty 512byte hard-drive");
+  Serial1.println("Determining if there is any current settings in my itty bitty 512 byte hard-drive");
    
   /** if (EEPROM.read(0) == blockStart) { // 11100000 is Binary for ASCII lowercase Alpha
     
@@ -403,7 +463,7 @@ bool getSettings() { //Checks and retrieves data from EEPROM memory
           wifiMulti.addAP(&esids[0], &epass[0]);
       }
       else {
-        goto memoryCheckCompleted; //Using a goto statement is frowned on and can make code hard to debug. But can be useful on rare ocasions.
+        goto memoryCheckCompleted; //Using a goto statement is frowned on and can make code hard to debug. But can be useful on rare occasions.
         // Here it's used to skip the next two check if there is no Access Points in memory. This is determined by a DEC 49, which is a 1 or True.
       }
       if (EEPROM.read(byteIndex + 1) == 49) {
@@ -449,7 +509,7 @@ bool getSettings() { //Checks and retrieves data from EEPROM memory
 
 // HTML Content
 //Reusable Code Blocks 
-String headTagContent(String title) { //HTML code for the head section of devices webpages. Made into function so it can be reusable instead of repeating code
+String headTagContent(String title) { //HTML code for the head section of devices web pages. Made into function so it can be reusable instead of repeating code
   Serial1.print("Received a HTTP request for: ");
   Serial1.println(server.uri());
   String content = "<html>\n <head>\n <title>";
@@ -476,7 +536,7 @@ String collectSettingsName() {
 }
 
 String displaySettingsName() {
-  //html code here
+  //HTML code here
 }
 
 String collectSettingsSec() {
@@ -541,7 +601,7 @@ String displayNotFound() {
   
 }
 //HTTP Request Helper Functions
-String settingsCDSwitch(String page) { //Determines the Settings collection or display page to return based on request uri
+String settingsCDSwitch(String page) { //Determines the Settings collection or display page to return based on request Uri
   String _pageUri = "/settings/" + page;
   String _page = page;
   String _content;
@@ -580,7 +640,7 @@ String settingsCDSwitch(String page) { //Determines the Settings collection or d
   return _content;  
 }
 
-String settingsHSNav(String page, bool success) { //Determines the Setting Nav buttons to display based on the success or failure of supplied variables
+String settingsHSNav(String page, bool success) { //Determines the Setting Navigation buttons to display based on the success or failure of supplied variables
   String _page = page;
   String _nextPage;
   bool _success = success;
@@ -622,7 +682,7 @@ String settingsHSNav(String page, bool success) { //Determines the Setting Nav b
   return _content;
 }
 
-//Webpages
+//Web pages
 void handleRoot() { //The web servers home page 
   String content = headTagContent("Home");
     content += "<body>\n <h1>Hello I'm " + thingName;
@@ -656,7 +716,7 @@ void handleSettings() { //Responds with current settings and allows a user to up
 //  IF Client - 
 // Mesh Role - Client, Router, Access Point, Disabled
 // Controller - web API, Controller Device 
-// Wifi Networks
+// WiFi Networks
 // Power Management
 // Pin settings
   String content = headTagContent("Settings");
@@ -665,7 +725,7 @@ void handleSettings() { //Responds with current settings and allows a user to up
         if ((stage.startsWith("new")) && (server.uri() == "/settings/")) {
           content += "<h1>Hello I'm a New Thing</h1>\n <h2>Please take a moment and answer the following questions:</h2>\n";
           content += "<h3>Don't worry there are only one or two questions per page.";
-          content += "My webpages can't be to big, I mean I'm only a few chips that add up to maybe the size of a quarter!</h3>\n";
+          content += "My web pages can't be to big, I mean I'm only a few chips that add up to maybe the size of a quarter!</h3>\n";
           content += "<form method='get' action='name/'><center><input type='submit' value='Start'></center></form>\n";
         }
         else if (stage == "invalid_APs") {
@@ -725,7 +785,7 @@ void handleSettings() { //Responds with current settings and allows a user to up
           if ((server.uri() == "/settings/cont/") && (server.args() > 0)) {
             
           }
-      //Wifi Settings 
+      //WiFi Settings 
        //Collect-Display
         if ((server.uri() == "/settings/wifi/") && (server.args() == 0)) {
           content += settingsCDSwitch("cont");
@@ -828,7 +888,7 @@ void handleNotFound() { //Response for invalid web address - 404 Not Found
 
 //Available Services 
 void launchDNS() { //Launching a DNS Server to allow direct access to the HTTP Server when this Thing is a Access Point
-  Serial1.println("Now I'm making it so you don't have to enter an IP every time you want to see my webpage");
+  Serial1.println("Now I'm making it so you don't have to enter an IP every time you want to see my web page");
   Serial1.println("This will only work if I'm your one and only ;) Well okay just your Access Point");
   // modify TTL associated  with the domain name (in seconds)
   // default is 60 seconds
@@ -847,7 +907,7 @@ void launchDNS() { //Launching a DNS Server to allow direct access to the HTTP S
   Serial1.println(domain);
 }
 
-void launchWebServer() { //Luunching an internal Web Server to host a basic html website
+void launchWebServer() { //Lunching an internal Web Server to host a basic HTML website
   Serial1.println("Setting things up to show the world! Okay, maybe just you. But you never know!");
   Serial1.println("Starting HTTP Server");
   server.on("/", handleRoot);

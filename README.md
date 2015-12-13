@@ -2,6 +2,9 @@
 
 ## Under Development - No Stable Version 
 
+For use with the ESP8266 and the Arduino libraries located at:
+https://github.com/esp8266/Arduino
+
 ### TO-DO List
 
 - Code memory functions
@@ -13,3 +16,8 @@
 - Add Mesh Ad-Hoc Network
 - Convert to Arduino Libraries
 	- Research: http://playground.arduino.cc/Code/Library
+
+### Notes
+
+Currently requires the following patch (http://www.esp8266.com/viewtopic.php?p=21726#p21726) 
+to the ESP8266 Arduino DNSServer library in order for Windows and Android browsers to be able to use DNS function. 
