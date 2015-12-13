@@ -8,6 +8,7 @@ https://github.com/esp8266/Arduino
 ### TO-DO List
 
 - Code memory functions
+	- setDeviceName(), setBlock(), and setBlockRef() functions need to be tested 
 - Complete HTML for Settings
 - Pin management functions
 - Pin/Serial Information Relay (RESTful API, MQTT, Mesh Network(Controller))
