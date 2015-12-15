@@ -203,28 +203,7 @@ int blockIDCount = 8; //Currently 8 block IDs
 char blockIDs[9] = {'N', 'S', 'R', 'C', 'W', 'D', 'P', 'A'};
 int blockRefStop = blockRefLength * blockIDCount + blockRefStart;
 
-bool setBlockRef(char blockID, char blockStart char blockLength) {
-  //Initializing Local Variables
-  char _blockID = blockID;
-  char _blockStart = blockStart;
-  char _blockLength = blockLength;
 
-  //Setting Block Reference information
-  if (!initBlockRef()) {
-    for (int x = blockRefStart; x <= blockRefStop; x += blockRefLength) {
-      if (EEPROM.read(x) == _blockID) {
-        EEPROM.write(x + 1, _blockStart);
-        EEPROM.write(x + 2, _blockLength);
-        EEPROM.commit();
-        return true;
-      }
-    }
-  }
-  else {
-    //In order for this function to have been called Block Reference should have already been Initialized
-    return false; 
-  }
-}
 
 bool initBlockRef() { //Initializes the EEPROM block if: it is blank, is corrupt, or is being refreshed
   if (EEPROM.read(0) != blockStart) {// ASCII lowercase Alpha
@@ -244,6 +223,29 @@ bool initBlockRef() { //Initializes the EEPROM block if: it is blank, is corrupt
     return true; 
   }
   return false;
+}
+
+bool setBlockRef(char blockID, char blockStart, char blockLength) {
+  //Initializing Local Variables
+  char _blockID = blockID;
+  char _blockStart = blockStart;
+  char _blockLength = blockLength;
+
+  //Setting Block Reference information
+  if !(initBlockRef()) {
+    for (int x = blockRefStart; x <= blockRefStop; x += blockRefLength) {
+      if (EEPROM.read(x) == _blockID) {
+        EEPROM.write(x + 1, _blockStart);
+        EEPROM.write(x + 2, _blockLength);
+        EEPROM.commit();
+        return true;
+      }
+    }
+  }
+  else {
+    //In order for this function to have been called Block Reference should have already been Initialized
+    return false; 
+  }
 }
 
 int availableBlock(char blockID, int bytesReq) { //Locates the first available big enough block
@@ -307,7 +309,8 @@ int availableBlock(char blockID, int bytesReq) { //Locates the first available b
 bool setBlock(int startBlock, String blockString, char blockID) {
   //Initializing Local Variables
   int _startBlock = startBlock; //What block to start writing to memory at
-  char _blockSize = blockString.length; //Length of blockString without trailing null char
+  char _blockStringLength = char(blockString.length());
+  char _blockSize = _blockStringLength; //Length of blockString without trailing null char
   char _blockBytes[_blockSize + 1];
   blockString.toCharArray(_blockBytes, sizeof(_blockBytes)); //Converting String Object to Char array
   char _blockID = blockID;
@@ -326,13 +329,18 @@ bool setBlock(int startBlock, String blockString, char blockID) {
     int _block = _startBlock + x;
     char _value;
     _value = EEPROM.read(_block);
-    delay(100)
+    delay(100);
     if (_value != _blockBytes[x]) {
       return false;
     } 
   }
   //Updating Block Reference
-  (setBlockRef(_blockID, _blockStart, _blockSize)) ? return true : return false;
+  if (setBlockRef(_blockID, _startBlock, _blockSize)) {
+    return true; 
+  }
+  else {
+    return false;
+  }
 }
 
 bool setDeviceName(String prefix, String deviceName) {
@@ -344,20 +352,25 @@ bool setDeviceName(String prefix, String deviceName) {
   char _blockID = 'N'; //Block ID for Settings Name
   int _bytesReq; 
   String _blockString; // N,P,x,(char is Prefix) + U,x, (char is Name)
-
+  char _blockStringLength = char(_blockString.length());
   //Building _blockString
     //N,P,x,(char is Prefix) + U,x, (char is Name)
   char _prefixLength = _prefix.length();
   char _deviceNameLength = _deviceName.length();
   _blockString = "NP" + _prefixLength + _prefix + "U" + _deviceNameLength + _deviceName;
-  Serial1.println(_blcokString);
-  _bytesReq = _blockString.length;
+  Serial1.println(_blockString);
+  _bytesReq = _blockStringLength;
 
   //Calling required functions 
   initBlockRef();
   int _availableBlock = availableBlock(_blockID, _bytesReq);
   Serial1.println(_availableBlock);
-  (setBlock(_availableBlock, _blockString)) ? return true : return false;
+  if (setBlock(_availableBlock, _blockString, _blockID)) {
+    return true; 
+  }
+  else {
+    return false;
+  }
 }
 
 void setSec() {
