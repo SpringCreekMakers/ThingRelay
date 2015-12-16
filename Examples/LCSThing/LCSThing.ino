@@ -232,17 +232,20 @@ bool setBlockRef(char blockID, char blockStart, char blockLength) {
   char _blockLength = blockLength;
 
   //Setting Block Reference information
-  if !(initBlockRef()) {
+  if (!initBlockRef()) {
+    Serial1.println("setBlockRef has been initialized");
     for (int x = blockRefStart; x <= blockRefStop; x += blockRefLength) {
       if (EEPROM.read(x) == _blockID) {
         EEPROM.write(x + 1, _blockStart);
         EEPROM.write(x + 2, _blockLength);
         EEPROM.commit();
+        Serial1.println("setBlockRef returned true");
         return true;
       }
     }
   }
   else {
+    Serial1.println("setBlockRef returned false");
     //In order for this function to have been called Block Reference should have already been Initialized
     return false; 
   }
@@ -331,14 +334,17 @@ bool setBlock(int startBlock, String blockString, char blockID) {
     _value = EEPROM.read(_block);
     delay(100);
     if (_value != _blockBytes[x]) {
+      Serial1.println("setBlock could not be confirmed");
       return false;
     } 
   }
   //Updating Block Reference
   if (setBlockRef(_blockID, _startBlock, _blockSize)) {
+    Serial1.println("setBlock returned true");
     return true; 
   }
   else {
+    Serial1.println("setBlock returned false");
     return false;
   }
 }
