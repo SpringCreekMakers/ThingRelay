@@ -195,15 +195,20 @@ char value;
     //D - Settings Pins
     //P - Settings Power
     //A - Settings Advanced
-char blockStart = 2;
+char blockStart = 224;
 int blockSize = 512; //Size of EEPROM in Bytes
 int blockRefStart = 1; //Hard coded location (byte) of the start to the block reference section
 int blockRefLength = 3; //Each BlockID Ref is currently 3 bytes
 int blockIDCount = 8; //Currently 8 block IDs
 char blockIDs[9] = {'N', 'S', 'R', 'C', 'W', 'D', 'P', 'A'};
-int blockRefStop = blockRefLength * blockIDCount + blockRefStart;
+int blockRefStop = (blockRefLength * blockIDCount) + blockRefStart - 1;
 
 
+void clearBlock() {
+  for (int i = 0; i < 512; i++)
+    EEPROM.write(i, 0);
+    EEPROM.commit();
+}
 
 bool initBlockRef() { //Initializes the EEPROM block if: it is blank, is corrupt, or is being refreshed
   if (EEPROM.read(0) != blockStart) {// ASCII lowercase Alpha
@@ -251,10 +256,11 @@ bool setBlockRef(char blockID, char blockStart, char blockLength) {
   }
 }
 
-int availableBlock(char blockID, int bytesReq) { //Locates the first available big enough block
+int availableBlock(char blockID, char bytesReq) { //Locates the first available big enough block
   char _blockID = blockID;
-  int _bytesReq = bytesReq;
-   
+  char _bytesReq = bytesReq;
+  Serial1.print("bytesReq Variable: ");
+  Serial1.println(_bytesReq, DEC);
   
   bool _currentBlock = false; //Is there a current block 
   char _currentBlockLength;
@@ -267,10 +273,15 @@ int availableBlock(char blockID, int bytesReq) { //Locates the first available b
       if (EEPROM.read(x) == _blockID) {
         _currentBlock = true;
         _currentBlockStart  = (EEPROM.read(x + 1));
+        Serial1.print("_currentBlockStart Variable: ");
+        Serial1.println(_currentBlockStart, DEC);
         _currentBlockLength = (EEPROM.read(x + 2));
+        Serial1.print("_currentBlockLength Variable: ");
+        Serial1.println(_currentBlockLength, DEC);
         if (_currentBlockLength >= _bytesReq) { //If this is true we can use the current block
           _currentBlockAvailable = true;
           _availableBlock = _currentBlockStart;
+          Serial1.println("Using current block");
           return _availableBlock;
         }
         break;
@@ -280,11 +291,19 @@ int availableBlock(char blockID, int bytesReq) { //Locates the first available b
       //Since current block is not big enough or is not available we must locate one that is
       char _blocks[blockIDCount * 2];
       int _blocksPointer = 0;
-      for (int x = blockRefStart; x <= blockRefStop; x += blockRefLength) {
+      for (int x = blockRefStart; x < blockRefStop; x += blockRefLength) {
+        Serial1.print("For Loop: ");
+        Serial1.println(x);
+        Serial1.print("_blocksPointer Variable: ");
+        Serial1.println(_blocksPointer);
         char _startByte;
         char _blockLength;
         _startByte = (EEPROM.read(x + 1));
+        Serial1.print("For Loop _startByte Variable: ");
+        Serial1.println(_startByte, DEC);
         _blockLength = (EEPROM.read(x + 2));
+        Serial1.print("For Loop _blockLength Variable: ");
+        Serial1.println(_blockLength, DEC);
         _blocks[_blocksPointer] = _startByte;
         _blocksPointer++;
         _blocks[_blocksPointer] = _blockLength;
@@ -292,13 +311,23 @@ int availableBlock(char blockID, int bytesReq) { //Locates the first available b
       }
       char _highestStartByte = blockRefStop + 1;
       char _highestTotalBytes = 0;
-      for (int x = 0; x <= (blockIDCount * 2); x += 2) {
-        if (_blocks[x] > _highestStartByte) {
+      Serial1.print("_highestStartByte Variable before loop: ");
+      Serial1.println(_highestStartByte, DEC);
+      for (int x = 0; x < (blockIDCount * 2);) {
+        if (_blocks[x] >= _highestStartByte) {
           _highestStartByte = _blocks[x];
-          _highestTotalBytes = _blocks[x + 1];
+          x++;
+          _highestTotalBytes = _blocks[x];
+          x++;
+        }
+        else {
+          x = x + 2;
         }
       }
-      Serial1.println(_highestStartByte);
+      Serial1.print("_highestStartByte Variable after loop: ");
+      Serial1.println(_highestStartByte, DEC);
+      Serial1.print("_highestTotalByte Variable after loop: ");
+      Serial1.println(_highestTotalBytes, DEC);
       if (((_highestStartByte - 1) + _highestTotalBytes + _bytesReq) < blockSize) {
         _availableBlock = _highestStartByte + _highestTotalBytes;
         return _availableBlock;
@@ -312,7 +341,7 @@ int availableBlock(char blockID, int bytesReq) { //Locates the first available b
 bool setBlock(int startBlock, String blockString, char blockID) {
   //Initializing Local Variables
   int _startBlock = startBlock; //What block to start writing to memory at
-  char _blockStringLength = char(blockString.length());
+  char _blockStringLength = blockString.length();
   char _blockSize = _blockStringLength; //Length of blockString without trailing null char
   char _blockBytes[_blockSize + 1];
   blockString.toCharArray(_blockBytes, sizeof(_blockBytes)); //Converting String Object to Char array
@@ -349,22 +378,30 @@ bool setBlock(int startBlock, String blockString, char blockID) {
   }
 }
 
-bool setDeviceName(String prefix, String deviceName) {
+bool setDeviceName(String iotPrefix, String deviceName) {
   //Initializing Local Variables
-  prefix.trim();
-  String _prefix = prefix;
+  iotPrefix.trim();
+  String _iotPrefix = iotPrefix;
   deviceName.trim();
   String _deviceName = deviceName;
   char _blockID = 'N'; //Block ID for Settings Name
-  int _bytesReq; 
-  String _blockString; // N,P,x,(char is Prefix) + U,x, (char is Name)
-  char _blockStringLength = char(_blockString.length());
+  char _bytesReq; 
+  String _blockString; // N,P,x,(char is iotPrefix) + U,x, (char is Name)
+  char _blockStringLength;
+  char _iotPrefixLength;
+  char _deviceNameLength;
   //Building _blockString
-    //N,P,x,(char is Prefix) + U,x, (char is Name)
-  char _prefixLength = _prefix.length();
-  char _deviceNameLength = _deviceName.length();
-  _blockString = "NP" + _prefixLength + _prefix + "U" + _deviceNameLength + _deviceName;
+    //N,P,x,(char is iotPrefix) + U,x, (char is Name)
+  _iotPrefixLength = _iotPrefix.length();
+  _deviceNameLength = _deviceName.length();
+  _blockString = "NP";
+  _blockString += _iotPrefixLength;
+  _blockString += _iotPrefix;
+  _blockString += "U";
+  _blockString += _deviceNameLength;
+  _blockString += _deviceName;
   Serial1.println(_blockString);
+  _blockStringLength = _blockString.length();
   _bytesReq = _blockStringLength;
 
   //Calling required functions 
@@ -420,7 +457,7 @@ bool getSettings() { //Checks and retrieves data from EEPROM memory
     //A - Settings Advanced
     
   
-  Serial1.println("Determining if there is any current settings in my itty bitty 512 byte hard-drive");
+  //Serial1.println("Determining if there is any current settings in my itty bitty 512 byte hard-drive");
    
   /** if (EEPROM.read(0) == blockStart) { // 11100000 is Binary for ASCII lowercase Alpha
     
@@ -547,7 +584,7 @@ String collectSettingsName() {
   String content;
   content += "<form method='post' action=''>\n";
   content += "<h2>Please choose a prefix for your IoT Network</h2>\n<h2>This could be something as simple as 'My House'. 10 Characters Max<br>";
-  content += "IoT Network Prefix:<br><input type='text' name='prefix' value='My House' maxlength='10'><br>Please choose a name for this device.";
+  content += "IoT Network Prefix:<br><input type='text' name='iotPrefix' value='My House' maxlength='10'><br>Please choose a name for this device.";
   content += "This is so you can identify the device from others in your network, something like 'Motion Sensor'. 15 Caracters Max<br> Unique Name:<br>";
   content += "<input type='text' name='deviceName' value='Motion Sensor' maxlength='15'><br>";
   content += "<input type='submit' value='Submit'>\n </form>"; 
@@ -764,8 +801,8 @@ void handleSettings() { //Responds with current settings and allows a user to up
           }
         //Handle Submit
           if ((server.uri() == "/settings/name/") && (server.args() > 0)) {
-            if ((server.arg("prefix") != NULL) && (server.arg("deviceName") != NULL)) {
-              if (setDeviceName(server.arg("prefix"),server.arg("deviceName"))) {
+            if ((server.arg("iotPrefix") != NULL) && (server.arg("deviceName") != NULL)) {
+              if (setDeviceName(server.arg("iotPrefix"),server.arg("deviceName"))) {
                 content += "<h2>The IoT Network Prefix and Unique Name have been updated :) </h2>\n";
                 content += settingsHSNav("name", true);
               }
