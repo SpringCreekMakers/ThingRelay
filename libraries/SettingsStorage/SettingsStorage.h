@@ -32,20 +32,20 @@ class SettingsStorage {
 
 	public:
 		SettingsStorage(int blockSize);
-		bool setBlockIDs(char blockIDs);
+		bool start(char blockIDs);
 		bool setBlock(String blockString, char blockID); // need to use availableBlock
 		String getBlock(char blockID);
+		void clear();
 	private:
 		char _blockStart;
 		int _blockSize;
-		int _blockRefStart; 
-		int _blockRefLength;
-		int _blockRefStop;
+		int _blockReferenceStart; 
+		int _blockReferenceLength;
+		int _blockReferenceStop;
 		char _blockIDs;
 		int _blockIDCount;
-		void clearBlock();
-		bool initBlockRef();
-		bool setBlockRef(char blockID, char blockStart, char blockLength);
+		bool initializeBlockReference();
+		bool setBlockReference(char blockID, char blockStart, char blockLength);
 		int availableBlock(char blockID, char bytesReq);
 };
 
