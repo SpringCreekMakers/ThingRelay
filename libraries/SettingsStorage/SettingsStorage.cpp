@@ -73,7 +73,7 @@ SettingsStorage::setBlockRef(char blockID, char _blockStart, char blockLength) {
   char _blockLength = blockLength;
 
   //Setting Block Reference information
-  if (!initBlockRef()) {
+  if (!initializeBlockReference()) {
     Serial1.println("setBlockRef has been initialized");
     for (int x = _blockReferenceLength; x <= _blockReferenceStop; x += _blockReferenceLength) {
       if (EEPROM.read(x) == _blockID) {
